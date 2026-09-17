@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TERRAWATCH — Mine Intelligence Command</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark">◈</span><span>TERRA<span>WATCH</span></span></div>
+        <div class="prototype-pill"><i></i> LIVE DEMO DATA</div>
+        <nav id="nav"></nav>
+        <div class="side-footer">
+          <div class="operator"><span class="avatar">AK</span><span><b>Arjun Kumar</b><small>Safety Operator</small></span><button aria-label="More options">•••</button></div>
+          <small>v0.9.4 • RESEARCH PROTOTYPE</small>
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div class="crumb"><button class="mobile-menu" id="menuBtn">☰</button><span id="pageEyebrow">COMMAND CENTER</span><h1 id="pageTitle">Mine overview</h1></div>
+          <div class="top-actions">
+            <button class="icon-btn" id="themeBtn" title="Toggle theme">◐</button>
+            <button class="sync-state" id="syncBtn"><span class="pulse"></span><span id="syncText">SYNCED JUST NOW</span></button>
+            <button class="primary" id="scenarioBtn">▶ Run demo sequence</button>
+          </div>
+        </header>
+        <div class="safety-banner"><span>◈</span><b>AI-ASSISTED PROTOTYPE ANALYSIS</b><span>Interpretations support trained personnel. Field verification and site-specific calibration are required.</span><button id="bannerClose" aria-label="Close">×</button></div>
+        <section id="content" class="content" aria-live="polite"></section>
+      </main>
+    </div>
+    <div class="toast-wrap" id="toasts"></div>
+    <div class="modal-backdrop" id="modal"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

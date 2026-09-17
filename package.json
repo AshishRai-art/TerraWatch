@@ -1,0 +1,13 @@
+{
+  "name": "terrawatch",
+  "version": "0.1.0",
+  "description": "TERRAWATCH mine monitoring research prototype",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.3.0"
+  }
+}
