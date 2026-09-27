@@ -10,8 +10,8 @@ let authenticatedUser = null;
 
 const navGroups = [
   ["OVERVIEW", [["Dashboard", "◫"], ["Map", "⌖"], ["Digital Twin", "◇"]]],
-  ["MONITORING", [["Nodes", "◉"], ["Sensors", "⌁"], ["Analytics", "⌁"], ["APCI", "◌"], ["AI Assistant", "✦"]]],
-  ["OPERATIONS", [["Alerts", "!"], ["Incidents", "▣"], ["Remote Inspection", "◒"], ["Robot", "◒"], ["History", "◷"]]],
+  ["MONITORING", [["Nodes", "◉"], ["Sensors", "⌁"], ["Seismometer", "∿"], ["Analytics", "⌁"], ["APCI", "◌"], ["AI Assistant", "✦"]]],
+  ["OPERATIONS", [["Alerts", "!"], ["Incidents", "▣"], ["Remote Inspection", "◒"], ["History", "◷"]]],
   ["SYSTEM", [["System Health", "♥"], ["Communication", "⌁"], ["Power", "ϟ"], ["Maintenance", "⚒"]]],
   ["REFERENCE", [["Reports", "▤"], ["Settings", "⚙"]]]
 ];
@@ -38,7 +38,8 @@ const state = {
   page: "Dashboard", nodes: structuredClone(initialNodes), selectedNode: "N03", selectedZone: "Zone C",
   scenario: "Multi-sensor convergence", demoStage: 0, running: false, robot: "STANDBY", robotLength: 0,
   incident: { id:"INC-2409", state:"INVESTIGATING", acknowledged:true, created:"14:32:18", target:"West Chamber / Zone C" },
-  syncSeconds: 10, lastSyncAt: Date.now(), dark: true, simulation: true, thresholds: [19,44,69], alerts: [], chat: [], charts: {}, filters: { node:"N03", range:"Last 6 hours" }
+  syncSeconds: 10, lastSyncAt: Date.now(), dark: true, simulation: true, thresholds: [19,44,69], alerts: [], chat: [], charts: {}, filters: { node:"N03", range:"Last 6 hours" },
+  seismic: { mode:"SIMULATION", node:"N03", channel:"resultant", waveform:[], eventHistory:[], activeEvent:null, demoRunning:false, demoElapsed:0, sampleRate:100, threshold:0.06, minDuration:1.2, dominantFrequency:null, quality:"GOOD" }
 };
 
 const baseAlerts = () => [
@@ -237,6 +238,7 @@ function assistantContext() {
     selectedNode: state.selectedNode,
     thresholds: state.thresholds,
     alerts: state.alerts,
+    seismic: { mode:state.seismic.mode, selectedNode:state.seismic.node, activeEvent:state.seismic.activeEvent, recentEvents:state.seismic.eventHistory.slice(0,5), channel:state.seismic.channel },
     nodes: state.nodes.map(({ id, location, zone, status, apci, tilt, crack, settlement, moisture, vibration, battery, rssi, snr, health, sync }) => ({ id, location, zone, status, apci, tilt, crack, settlement, moisture, vibration, battery, rssi, snr, health, sync }))
   };
 }
@@ -283,8 +285,128 @@ function renderHowItWorks() { const steps=[["SENSE","Distributed tilt, crack, se
 function renderResearch() { const refs=[["ESP32 platform","ESTABLISHED RESEARCH","Microcontroller documentation and edge processing ecosystem.","https://docs.espressif.com/"],["LoRa / SX1278","ESTABLISHED RESEARCH","Long-range low-power radio technology; underground performance depends on geometry and environment.","https://www.semtech.com/products/wireless-rf/lora-connect/sx1278"],["Mine IoT monitoring","ESTABLISHED RESEARCH","Distributed sensing and wireless monitoring research informs system architecture.","https://www.cdc.gov/niosh/mining/"],["Soft-growing vine robots","ESTABLISHED RESEARCH","Everting robots are an active research area for navigating constrained environments.","https://www.robotics.princeton.edu/"],["APCI framework","TERRAWATCH PROPOSAL","Adaptive Precursor Convergence Index is a proposed interpretable framework requiring field validation.","#"],["TERRAWATCH integration","PROPOSED INTEGRATION","Combines edge monitoring, APCI, AI-assisted analysis and remote inspection in one prototype.","#"]]; return `${pageHead("Research & references", "Established sources are distinguished from TERRAWATCH’s proposed integration and analysis framework.")}<div class="research-grid">${refs.map(([t,type,d,link])=>`<article class="panel reference-card"><span class="ref-type">${type}</span><h3>${t}</h3><p>${d}</p><a href="${link}" target="_blank" rel="noreferrer">View reference ↗</a></article>`).join("")}</div>`; }
 function renderLimitations() { const limits=[["Calibration and baseline","Sensor calibration and site-specific baseline learning are required; no universal threshold is implied."],["AI evidence","AI requires representative data and produces assistive observations, not guarantees or validated predictive accuracy."],["Communications","LoRa performance depends on mine geometry, antenna placement, materials and environmental conditions."],["Hardware resilience","Sensors, power systems and links can fail. A fault is not automatically a geological event."],["Robot engineering","A soft-growing robot would require detailed engineering, field testing, operational procedures and safety validation."],["Deployment governance","Mine deployment requires suitable certification, regulatory compliance, safety procedures and trained human oversight."]]; return `${pageHead("Limitations & safety boundary", "Scientific honesty is built into this prototype: the system supports risk assessment and verification, not autonomous critical decisions.")}<div class="limits-grid">${limits.map(([t,d])=>`<article class="panel limit"><h3>${t}</h3><p>${d}</p></article>`).join("")}</div><div style="height:16px"></div>${panel("Human-in-the-loop safety", "", `<div class="flow">${[["SENSORS","observe"],["AI / APCI","assist"],["ALERT","inform"],["HUMAN REVIEW","verify"],["FIELD ACTION","authorize"]].map(([a,b])=>`<div class="flow-step"><b>${a}</b><p>${b}</p></div>`).join("")}</div>`)}`; }
 function renderSettings() { return `${pageHead("Settings", "Prototype configuration controls. Production deployment would require governed configuration management and validation.", `<button class="secondary" data-action="restore">Restore demo defaults</button><button class="primary" data-action="save-settings">Save changes</button>`)}<div class="settings-layout">${panel("Simulation control", "Demo data is intentionally labeled and does not represent field conditions", `<div class="setting-row"><div><b>Simulation mode</b><small>Enable gradual scenario-based telemetry updates</small></div><button class="toggle ${state.simulation?"on":""}" data-toggle="simulation"></button></div><div class="setting-row"><div><b>Demo scenario</b><small>Applied to N03 when the sequence runs</small></div><select class="select" id="scenarioSelect">${["Normal","Rising crack","Increasing tilt","Increasing settlement","Moisture increase","Abnormal vibration","Multi-sensor convergence","Sensor failure","Node offline","LoRa communication failure","Battery low","Potential ground-instability event"].map(x=>`<option ${x===state.scenario?"selected":""}>${x}</option>`).join("")}</select></div><div class="setting-row"><div><b>Refresh interval</b><small>Presentation prototype target refresh</small></div><select class="select"><option>10 seconds</option><option>30 seconds</option><option>60 seconds</option></select></div>`)}${panel("Risk & alert configuration", "APCI bands and routing are administrator-controlled", `<div class="setting-row"><div><b>APCI band thresholds</b><small>Currently 0–${state.thresholds[0]}, ${state.thresholds[0]+1}–${state.thresholds[1]}, ${state.thresholds[1]+1}–${state.thresholds[2]}, ${state.thresholds[2]+1}–100</small></div><button class="secondary" data-nav="APCI">Configure</button></div><div class="setting-row"><div><b>Local buzzer / RGB alert</b><small>Conceptual node-level immediate indication</small></div><button class="toggle on"></button></div><div class="setting-row"><div><b>Stale data warning</b><small>Surface receipt gaps to operator</small></div><button class="toggle on"></button></div>`)}${panel("Access & audit", "Demonstration security — not production hardened", `<div class="setting-row"><div><b>Current role</b><small>Operators can acknowledge and inspect; administrators configure system rules.</small></div><select class="select"><option>Operator</option><option>Admin</option><option>Viewer</option></select></div><div class="setting-row"><div><b>Audit log</b><small>Record simulated operator actions and state changes</small></div><button class="toggle on"></button></div>`)}${panel("Display", "", `<div class="setting-row"><div><b>Theme</b><small>Command center display preference</small></div><button class="secondary" data-action="theme">Toggle theme</button></div><div class="setting-row"><div><b>Map risk heatmap</b><small>Prototype spatial risk layer</small></div><button class="toggle on"></button></div>`)} </div>`; }
+function seismicClock(date = new Date()) { return date.toLocaleTimeString([], { hour12:false }); }
+function seismicAmplitude(sample) { return Math.max(Math.abs(sample.x), Math.abs(sample.y), Math.abs(sample.z), Math.abs(sample.resultant)); }
+function seismicStatus(amplitude) {
+  if (amplitude >= state.seismic.threshold * 2.5) return "CRITICAL";
+  if (amplitude >= state.seismic.threshold * 1.45) return "EVENT";
+  if (amplitude >= state.seismic.threshold) return "WARNING";
+  return "NORMAL";
+}
+function seismicSample() {
+  const elapsed = state.seismic.demoElapsed;
+  const active = state.seismic.demoRunning;
+  const envelope = !active ? 0.008 : elapsed < 2 ? 0.01 : elapsed < 4 ? 0.035 : elapsed < 8 ? 0.105 : elapsed < 10 ? 0.16 : 0.025;
+  const frequency = elapsed >= 4 && elapsed < 10 ? 7 : 2;
+  const noise = (Math.random() - 0.5) * (active ? 0.012 : 0.004);
+  const x = Math.sin(elapsed * frequency * Math.PI * 2) * envelope + noise;
+  const y = Math.sin(elapsed * (frequency + 1) * Math.PI * 2 + 1) * envelope * 0.72 + noise * 0.7;
+  const z = Math.cos(elapsed * (frequency - 1) * Math.PI * 2) * envelope * 0.54 + noise * 0.5;
+  return { time: seismicClock(), x, y, z, resultant: Math.sqrt(x*x + y*y + z*z) };
+}
+function seismicWaveformSvg() {
+  const samples = state.seismic.waveform.slice(-120);
+  const width = 900, height = 260, pad = 28, max = Math.max(state.seismic.threshold * 2.8, ...samples.map(seismicAmplitude), 0.08);
+  const series = state.seismic.channel === "all" ? ["x","y","z","resultant"] : [state.seismic.channel];
+  const colors = { x:"#16324F", y:"#64748B", z:"#334155", resultant:"#B7791F" };
+  const line = key => samples.map((sample, index) => `${pad + index * (width - pad * 2) / Math.max(samples.length - 1, 1)},${height / 2 - (sample[key] / max) * (height / 2 - pad)}`).join(" ");
+  const thresholdY = height / 2 - (state.seismic.threshold / max) * (height / 2 - pad);
+  return `<svg class="seismic-wave-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${state.seismic.channel} seismic waveform"><path class="seismic-grid-line" d="M${pad} ${height/2}H${width-pad}M${pad} ${pad}H${width-pad}M${pad} ${height-pad}H${width-pad}"/><path class="seismic-threshold" d="M${pad} ${thresholdY}H${width-pad}M${pad} ${height-thresholdY}H${width-pad}"/><text x="4" y="${pad+4}">+${max.toFixed(2)}</text><text x="4" y="${height/2+4}">0</text><text x="4" y="${height-pad+4}">-${max.toFixed(2)}</text>${series.map(key=>`<polyline points="${line(key)}" fill="none" stroke="${colors[key]}" stroke-width="${key==="resultant"?2.6:1.6}"/>`).join("")}<text x="${width-122}" y="${height-8}">time · ${samples.length} samples</text></svg>`;
+}
+function seismicSpectrum() {
+  const samples = state.seismic.waveform.slice(-96).map(sample => sample[state.seismic.channel] || sample.resultant);
+  if (samples.length < 32) return `<div class="seismic-empty">Insufficient samples for a spectrum view.</div>`;
+  const bins = Array.from({length:8}, (_, bin) => {
+    const frequency = (bin + 1) * state.seismic.sampleRate / samples.length;
+    const magnitude = Math.abs(samples.reduce((sum, value, index) => sum + value * Math.sin((2 * Math.PI * (bin + 1) * index) / samples.length), 0)) / samples.length;
+    return { frequency, magnitude };
+  });
+  const peak = Math.max(...bins.map(bin=>bin.magnitude), 0.001);
+  return `<div class="spectrum-bars" role="img" aria-label="Experimental frequency spectrum">${bins.map(bin=>`<div class="spectrum-bin"><i style="height:${Math.max(6,bin.magnitude/peak*100)}%"></i><span>${bin.frequency.toFixed(1)} Hz</span></div>`).join("")}</div><small>Experimental spectrum from the local demo buffer; field calibration required.</small>`;
+}
+function seismicEventDetail(event) {
+  if (!event) return "No event selected.";
+  return `<b>${event.id} · ${event.status}</b><br>Node: ${event.node}<br>Start: ${event.start}<br>End: ${event.end || "In progress"}<br>Duration: ${event.duration ? `${event.duration.toFixed(1)} s` : "In progress"}<br>Peak: ${event.peak.toFixed(3)} relative units<br>Sensor: ${event.sensor}<br>Data quality: ${event.quality}<br><br>This is a prototype vibration event, not a collapse confirmation.`;
+}
+function commitSeismicEvent() {
+  const event = state.seismic.activeEvent;
+  if (!event || event.committed) return;
+  event.end = seismicClock();
+  event.duration = Math.max(0.1, state.seismic.demoElapsed - event.startedAt);
+  event.committed = true;
+  state.seismic.eventHistory.unshift(event);
+  state.seismic.eventHistory = state.seismic.eventHistory.slice(0, 12);
+  state.seismic.activeEvent = null;
+  state.alerts.unshift({ type:"warning", title:"Vibration event detected", detail:`${event.node} • peak ${event.peak.toFixed(3)} relative units • ${event.duration.toFixed(1)} s`, time:"now" });
+  const node = n(event.node);
+  if (node) node.seismicStatus = event.status;
+  toast("Vibration event detected", `${event.node} requires human verification.`, event.status === "CRITICAL" ? "high" : "");
+}
+function updateSeismicSample() {
+  if (state.seismic.mode !== "SIMULATION") return;
+  const sample = seismicSample();
+  state.seismic.waveform.push(sample);
+  state.seismic.waveform = state.seismic.waveform.slice(-160);
+  const amplitude = seismicAmplitude(sample);
+  const status = seismicStatus(amplitude);
+  if (state.seismic.demoRunning && status !== "NORMAL" && !state.seismic.activeEvent) {
+    state.seismic.activeEvent = { id:`EVT-${String(state.seismic.eventHistory.length + 1).padStart(4,"0")}`, node:state.seismic.node, start:sample.time, startedAt:state.seismic.demoElapsed, peak:amplitude, status, sensor:"MPU6050 / SW-420", quality:"GOOD", committed:false };
+  }
+  if (state.seismic.activeEvent) {
+    state.seismic.activeEvent.peak = Math.max(state.seismic.activeEvent.peak, amplitude);
+    state.seismic.activeEvent.status = status === "CRITICAL" ? "CRITICAL" : state.seismic.activeEvent.status;
+  }
+  if (state.seismic.demoRunning) {
+    state.seismic.demoElapsed += 0.12;
+    if (state.seismic.demoElapsed >= 11) {
+      state.seismic.demoRunning = false;
+      commitSeismicEvent();
+      if (state.page === "Seismometer") render();
+    }
+  }
+  if (state.page === "Seismometer") {
+    const chart = $("#seismicWaveform");
+    if (chart) chart.innerHTML = seismicWaveformSvg();
+    const activity = $("#seismicActivity");
+    if (activity) activity.innerHTML = `<strong>${state.seismic.activeEvent ? "VIBRATION DETECTED" : status === "WARNING" ? "ELEVATED VIBRATION" : "NO SIGNIFICANT VIBRATION"}</strong><span>${state.seismic.activeEvent ? `Event ${state.seismic.activeEvent.id} · peak ${state.seismic.activeEvent.peak.toFixed(3)} relative units` : `Channel ${state.seismic.channel.toUpperCase()} · ${state.seismic.mode} DATA`}</span>`;
+  }
+}
+function startSeismicDemo() {
+  state.seismic.mode = "SIMULATION";
+  state.seismic.demoRunning = true;
+  state.seismic.demoElapsed = 0;
+  state.seismic.activeEvent = null;
+  state.seismic.waveform = [];
+  state.seismic.node = state.selectedNode || "N03";
+  setPage("Seismometer");
+  toast("Seismic demo started", "Relative vibration data is simulated and not a mine measurement.");
+}
+async function loadLiveSeismic() {
+  try {
+    const response = await fetch(`${API_BASE}/seismic`, { headers:{ Accept:"application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const samples = Array.isArray(payload) ? payload : payload.samples || payload.waveform || [];
+    if (!samples.length) throw new Error("No seismic samples returned");
+    state.seismic.waveform = samples.slice(-160).map(sample=>({ time:sample.time || seismicClock(), x:Number(sample.x ?? sample.accel_x ?? 0), y:Number(sample.y ?? sample.accel_y ?? 0), z:Number(sample.z ?? sample.accel_z ?? 0), resultant:Number(sample.resultant ?? sample.amplitude ?? 0) }));
+    state.seismic.quality = "GOOD";
+    render();
+  } catch (error) {
+    state.seismic.quality = "DEGRADED";
+    toast("Live seismometer unavailable", "Unable to retrieve latest telemetry; no simulated values were substituted.", "high");
+    render();
+  }
+}
+function renderSeismometer() {
+  const selectedNode = n(state.seismic.node) || n("N03");
+  if (!state.seismic.waveform.length) for (let i=0;i<80;i++) state.seismic.waveform.push({time:seismicClock(),x:0.004,y:0.003,z:0.002,resultant:0.005});
+  const event = state.seismic.activeEvent || state.seismic.eventHistory[0];
+  const rows = state.seismic.eventHistory.map(item=>`<tr><td>${item.start}</td><td>${item.node}</td><td>${item.id}</td><td>${item.peak.toFixed(3)}</td><td>${item.duration?.toFixed(1) || "--"} s</td><td>${item.status}</td><td><button class="row-action" data-action="seismic-view-event" data-event-id="${item.id}">VIEW</button></td></tr>`).join("") || `<tr><td colspan="7">No vibration events recorded in this session.</td></tr>`;
+  const nodeRows = state.nodes.map(node=>`<tr><td><b>${node.id}</b><br><small>${node.location}</small></td><td><span class="seismic-state ${node.id===state.seismic.node && state.seismic.activeEvent ? "event" : node.status.toLowerCase()}">${node.id===state.seismic.node && state.seismic.activeEvent ? state.seismic.activeEvent.status : node.status}</span></td><td>${node.id===state.seismic.node && event ? event.peak.toFixed(3) : "--"}</td><td>${node.id===state.seismic.node && event ? event.id : "None"}</td><td>${node.health.includes("Fault") ? "SENSOR ERROR" : node.status === "OFFLINE" ? "--" : "MPU6050 / SW-420"}</td><td>${node.status === "OFFLINE" ? "Offline" : node.rssi && node.rssi > -96 ? "Good" : "Weak"}</td><td>${node.sync}</td></tr>`).join("");
+  return `${pageHead("Seismometer", "Mine vibration and seismic activity monitoring", `<span class="seismic-mode ${state.seismic.mode.toLowerCase()}">● ${state.seismic.mode}</span><button class="secondary" data-action="seismic-sync">Sync now</button><button class="primary" data-action="start-seismic-demo">${state.seismic.demoRunning ? "Stop demo event" : "Start demo event"}</button>`)}<div class="seismic-note">${state.seismic.mode === "SIMULATION" ? "DEMO / SIMULATION DATA — relative amplitude only; not a real mine measurement." : "LIVE SENSOR DATA — values depend on connected hardware and calibration."}</div><div class="seismic-kpis"><article class="kpi"><div class="label">CURRENT STATUS</div><div class="value">${state.seismic.activeEvent ? state.seismic.activeEvent.status : "NORMAL"}</div><div class="delta">${state.seismic.activeEvent ? "Vibration event in progress" : "Baseline vibration"}</div></article><article class="kpi"><div class="label">PEAK</div><div class="value">${event ? event.peak.toFixed(3) : "--"}</div><div class="delta">Relative units</div></article><article class="kpi"><div class="label">EVENT COUNT</div><div class="value">${state.seismic.eventHistory.length}</div><div class="delta">This session</div></article><article class="kpi"><div class="label">AFFECTED NODE</div><div class="value">${selectedNode?.id || "--"}</div><div class="delta">${selectedNode?.location || "Unavailable"}</div></article></div><div class="seismic-grid"><section class="panel seismic-wave-panel"><div class="panel-head"><div><h2>Live seismic waveform</h2><p>Fast local demo buffer · ${state.seismic.sampleRate} Hz conceptual sampling · dashboard sync remains 10 seconds</p></div><div class="seismic-channel-buttons">${["x","y","z","resultant","all"].map(channel=>`<button class="small-btn ${state.seismic.channel===channel?"active":""}" data-seismic-channel="${channel}">${channel.toUpperCase()}</button>`).join("")}</div></div><div class="seismic-activity" id="seismicActivity"><strong>${state.seismic.activeEvent ? "VIBRATION DETECTED" : "NO SIGNIFICANT VIBRATION"}</strong><span>Channel ${state.seismic.channel.toUpperCase()} · ${state.seismic.mode} DATA</span></div><div class="seismic-waveform" id="seismicWaveform">${seismicWaveformSvg()}</div><div class="seismic-legend"><span><i class="seismic-key resultant"></i>Resultant</span><span><i class="seismic-key threshold"></i>Prototype threshold</span><span>Units: relative amplitude</span></div></section><div class="seismic-side-stack">${panel("Selected event", "Human review required", `<div class="seismic-event-detail">${seismicEventDetail(event)}</div>`, `<button class="small-btn" data-action="seismic-view-event" ${event?"":"disabled"}>View event</button><button class="small-btn" data-action="seismic-ai" ${event?"":"disabled"}>Analyze event</button>`)}${panel("Frequency / spectrum", "Experimental view when sufficient samples exist", seismicSpectrum(), `<button class="small-btn" data-action="seismic-explain">Explain waveform</button>`)}</div></div><div class="seismic-grid seismic-lower-grid">${panel("Event history", "Recorded vibration events in the current session", `<div class="table-wrap"><table class="data-table"><thead><tr><th>TIME</th><th>NODE</th><th>EVENT</th><th>PEAK</th><th>DURATION</th><th>STATUS</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`, `<button class="small-btn" data-action="export-seismic">Export event data</button>`)}${panel("Seismic detector circuit status", "TerraWatch prototype detector circuit · not a certified industrial instrument", `<div class="circuit-flow"><span>VIBRATION</span><b>↓</b><span>MPU6050 / SW-420</span><b>↓</b><span>ESP32 · LOCAL EVENT PROCESSING</span><b>↓</b><span>SD LOGGING · LoRa · GATEWAY</span><b>↓</b><strong>TERRAWATCH DASHBOARD</strong></div><div class="diagnostic-grid"><div><b>MPU6050</b><small>I2C · SDA GPIO 21 · SCL GPIO 22 · 0x69</small><span class="diagnostic-ok">CONNECTED</span></div><div><b>SW-420</b><small>Digital trigger · GPIO 32</small><span class="diagnostic-ok">NORMAL</span></div><div><b>ESP32 / SD</b><small>Local processing and logging</small><span class="diagnostic-ok">AVAILABLE</span></div><div><b>LoRa</b><small>RSSI ${selectedNode?.rssi ?? "--"} · SNR ${selectedNode?.snr ?? "--"}</small><span class="diagnostic-${selectedNode?.status === "OFFLINE" ? "error":"ok"}">${selectedNode?.status === "OFFLINE" ? "NODE OFFLINE":"CONNECTED"}</span></div></div>`)} </div><div class="seismic-grid seismic-lower-grid">${panel("Node seismic status", "Status is separate from geological risk; offline and sensor errors are not event confirmations.", `<div class="table-wrap"><table class="data-table"><thead><tr><th>NODE</th><th>STATUS</th><th>PEAK</th><th>EVENT</th><th>SENSOR</th><th>SIGNAL</th><th>LAST UPDATE</th></tr></thead><tbody>${nodeRows}</tbody></table></div>`)}${panel("Signal processing", "Prototype settings require field calibration", `<div class="seismic-settings"><label>Vibration threshold <input type="number" step="0.01" min="0.01" value="${state.seismic.threshold}" data-seismic-threshold></label><label>Minimum event duration <input type="number" step="0.1" min="0.1" value="${state.seismic.minDuration}" data-seismic-duration></label><p>Baseline removal, peak detection and RMS/spectrum processing are demonstrated locally. No P-wave/S-wave classification is claimed from SW-420 data.</p><button class="secondary" data-action="seismic-defaults">Restore defaults</button></div>`)} </div>`;
+}
 function render() {
-  const pages={"Dashboard":renderDashboard,"Map":renderMap,"Nodes":()=>renderNodes(),"Sensors":()=>renderNodes("sensors"),"Analytics":renderAnalytics,"APCI":renderAPCI,"AI Assistant":renderAI,"Alerts":renderAlerts,"Incidents":renderIncidents,"Remote Inspection":renderRemoteInspection,"Robot":renderRemoteInspection,"History":renderHistory,"System Health":()=>renderHealthPage("Health"),"Communication":()=>renderHealthPage("Communication"),"Power":()=>renderHealthPage("Power"),"Maintenance":renderMaintenance,"Digital Twin":renderTwin,"Reports":renderReports,"Settings":renderSettings};
+  const pages={"Dashboard":renderDashboard,"Map":renderMap,"Nodes":()=>renderNodes(),"Sensors":()=>renderNodes("sensors"),"Seismometer":renderSeismometer,"Analytics":renderAnalytics,"APCI":renderAPCI,"AI Assistant":renderAI,"Alerts":renderAlerts,"Incidents":renderIncidents,"Remote Inspection":renderRemoteInspection,"History":renderHistory,"System Health":()=>renderHealthPage("Health"),"Communication":()=>renderHealthPage("Communication"),"Power":()=>renderHealthPage("Power"),"Maintenance":renderMaintenance,"Digital Twin":renderTwin,"Reports":renderReports,"Settings":renderSettings};
   $("#content").innerHTML=(pages[state.page]||renderDashboard)();
   bindRenderedActions();
   initLeafletMaps();
@@ -294,6 +416,28 @@ function bindRenderedActions() {
   $$('[data-node]').forEach(el=>el.addEventListener('click',()=>{state.selectedNode=el.dataset.node;state.selectedZone=n(state.selectedNode).zone; if(state.page==="Nodes"||state.page==="Sensors") openNodeModal(n(state.selectedNode)); else render();}));
   $$('[data-question]').forEach(el=>el.addEventListener('click',()=>sendChat(el.dataset.question)));
   $$('[data-action]').forEach(el=>el.addEventListener('click',()=>handleAction(el.dataset.action,el)));
+  if (state.page === "Seismometer") {
+    const actions = $(".page-actions");
+    if (actions && !$("[data-action='toggle-seismic-mode']", actions)) {
+      const modeButton = document.createElement("button");
+      modeButton.className = "secondary";
+      modeButton.dataset.action = "toggle-seismic-mode";
+      modeButton.textContent = `Use ${state.seismic.mode === "SIMULATION" ? "live" : "simulation"} mode`;
+      modeButton.addEventListener("click", () => handleAction("toggle-seismic-mode", modeButton));
+      actions.prepend(modeButton);
+    }
+    if (actions && (state.seismic.activeEvent || state.seismic.eventHistory.length) && !$("[data-action='seismic-map']", actions)) {
+      const mapButton = document.createElement("button");
+      mapButton.className = "secondary";
+      mapButton.dataset.action = "seismic-map";
+      mapButton.textContent = "View on map";
+      mapButton.addEventListener("click", () => handleAction("seismic-map", mapButton));
+      actions.prepend(mapButton);
+    }
+  }
+  $$('[data-seismic-channel]').forEach(el=>el.addEventListener('click',()=>{state.seismic.channel=el.dataset.seismicChannel;render();}));
+  $("[data-seismic-threshold]")?.addEventListener("change", event=>{state.seismic.threshold=Math.max(0.01,Number(event.target.value)||0.06);render();});
+  $("[data-seismic-duration]")?.addEventListener("change", event=>{state.seismic.minDuration=Math.max(0.1,Number(event.target.value)||1.2);render();});
   $$('[data-robot]').forEach(el=>el.addEventListener('click',()=>robotAction(el.dataset.robot)));
   $$(".threshold-input").forEach(el=>el.addEventListener("change",()=>state.thresholds[+el.dataset.index]=Math.max(0,Math.min(99,+el.value||0))));
   $("#miniChat")?.addEventListener("submit",e=>{e.preventDefault(); const q=$("input",e.currentTarget).value.trim(); if(q){setPage("AI Assistant");sendChat(q);}});
@@ -331,6 +475,15 @@ function handleAction(action, el) {
   if(action==="restore"){Object.assign(state,{nodes:structuredClone(initialNodes),scenario:"Multi-sensor convergence",demoStage:0});state.alerts=baseAlerts();toast("Demo defaults restored","Telemetry and alert states have been reset.");render();}
   if(action==="save-settings")toast("Settings saved","Prototype preferences have been applied to this session.");
   if(action==="theme"){toggleTheme();}
+  if(action==="start-seismic-demo"){if(state.seismic.demoRunning){state.seismic.demoRunning=false;commitSeismicEvent();render();}else startSeismicDemo();}
+  if(action==="toggle-seismic-mode"){state.seismic.demoRunning=false;state.seismic.mode=state.seismic.mode==="SIMULATION"?"LIVE":"SIMULATION";state.seismic.waveform=[];render();if(state.seismic.mode==="LIVE")loadLiveSeismic();}
+  if(action==="seismic-sync"){completeSync();toast("Seismometer sync","Dashboard telemetry synchronized; local waveform sampling continues independently.");}
+  if(action==="seismic-defaults"){state.seismic.threshold=0.06;state.seismic.minDuration=1.2;render();}
+  if(action==="seismic-view-event"){const event=state.seismic.eventHistory.find(item=>item.id===el.dataset.eventId)||state.seismic.activeEvent;openModal(event ? `${event.id} · Seismic event` : "Seismic event",seismicEventDetail(event),"Close");}
+  if(action==="seismic-ai"){const event=state.seismic.activeEvent||state.seismic.eventHistory[0];if(event)sendChat(`Analyze the vibration event ${event.id} at ${event.node}. Include peak ${event.peak.toFixed(3)} relative units, duration ${event.duration?.toFixed(1)||"in progress"} seconds, related node readings, and limitations.`);}
+  if(action==="seismic-explain"){sendChat("Explain the current Seismometer waveform and distinguish observed vibration from a confirmed geological event.");}
+  if(action==="seismic-map"){state.selectedNode=state.seismic.node;state.selectedZone=n(state.seismic.node)?.zone||state.selectedZone;setPage("Map");}
+  if(action==="export-seismic"){const header="event_id,node_id,start,end,duration_seconds,peak_relative_units,status,sensor,quality";const body=state.seismic.eventHistory.map(event=>[event.id,event.node,event.start,event.end,event.duration?.toFixed(2)||"",event.peak.toFixed(4),event.status,event.sensor,event.quality].join(","));download("terrawatch-seismic-events.csv",[header,...body].join("\n"),"text/csv");toast("Event data exported","Seismic event records were downloaded.");}
 }
 function robotAction(action){
   if(action==="start"){state.robot="DEPLOYED"; if(!state.robotLength)state.robotLength=2.4; toast("Inspection deployment started","R1 camera and simulated telemetry are now active.");}
@@ -417,7 +570,7 @@ function tickDemo(){
     else {node.vibration+=.04*scale;node.apci=Math.min(92,Math.round(node.apci+5.5*scale));node.status=riskFrom(node.apci);if(node.status==="HIGH"&&!state.alerts.some(x=>x.title.includes("HIGH PRIORITY"))){state.alerts.unshift({type:"warning",title:"HIGH PRIORITY — verification required",detail:"N03 • APCI high in simulated convergence scenario",time:"now"});toast("Potential event escalated","N03 has entered HIGH in the demonstration. This is not a collapse confirmation.","high");}if(state.demoStage>=13){state.running=false;$("#scenarioBtn").textContent="▶ Run demo sequence";toast("Demo sequence complete","Open Remote Inspection to continue the human-led workflow.");}}
     if([2,5,9,13].includes(state.demoStage) && state.page !== "AI Assistant") render();
   }
-  if((state.robot==="DEPLOYED"||state.robot==="RETURNING") && state.simulation){state.robotLength=state.robot==="DEPLOYED"?Math.min(14,state.robotLength+.18):Math.max(0,state.robotLength-.25);if(state.robotLength===0&&state.robot==="RETURNING"){state.robot="STANDBY";toast("Robot returned","Route R1 simulation is complete.");}if(state.page==="Remote Inspection"||state.page==="Robot")render();}
+  if((state.robot==="DEPLOYED"||state.robot==="RETURNING") && state.simulation){state.robotLength=state.robot==="DEPLOYED"?Math.min(14,state.robotLength+.18):Math.max(0,state.robotLength-.25);if(state.robotLength===0&&state.robot==="RETURNING"){state.robot="STANDBY";toast("Robot returned","Route R1 simulation is complete.");}if(state.page==="Remote Inspection")render();}
 }
 
 $("#nav").innerHTML=navTemplate();
@@ -442,4 +595,5 @@ $$('[data-demo-user]').forEach(button=>button.addEventListener("click",()=>{
 }));
 $("#logoutBtn").addEventListener("click",signOut);
 setInterval(tickDemo,1000);
+setInterval(updateSeismicSample,120);
 $("#username").focus();
