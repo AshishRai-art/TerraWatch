@@ -243,8 +243,40 @@ function assistantContext() {
   };
 }
 async function askLiveAssistant(query) {
-  if (!window.terrawatchAI?.ask) return { ok: false, error: "The secure AI bridge is unavailable." };
-  return window.terrawatchAI.ask(query, assistantContext());
+  try {
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        query,
+        context: assistantContext()
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: result.error || "AI service request failed."
+      };
+    }
+
+    return {
+      ok: true,
+      answer: result.answer
+    };
+
+  } catch (error) {
+    console.error("TerraWatch AI error:", error);
+
+    return {
+      ok: false,
+      error: "Secure AI service is currently unavailable."
+    };
+  }
 }
 function renderAI() {
   const messages= state.chat.length?state.chat:[{role:"ai",text:chatAnswer("what is happening in zone c")}];
