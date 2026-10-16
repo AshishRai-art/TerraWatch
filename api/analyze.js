@@ -9,10 +9,16 @@ module.exports = async (req, res) => {
   try {
     const { query, context } = req.body || {};
 
-    if (!query || typeof query !== "string") {
+    if (!query || typeof query !== "string" || !query.trim()) {
       return res.status(400).json({
         ok: false,
         error: "Missing query"
+      });
+    }
+    if (query.trim().length > 1200) {
+      return res.status(400).json({
+        ok: false,
+        error: "Keep questions under 1200 characters."
       });
     }
 
@@ -63,7 +69,7 @@ ${JSON.stringify(context || {}, null, 2)}
             {
               parts: [
                 {
-                  text: prompt
+          text: prompt
                 }
               ]
             }
@@ -75,7 +81,7 @@ ${JSON.stringify(context || {}, null, 2)}
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Gemini API error:", data);
+      console.error("Gemini API request failed with HTTP", response.status);
 
       return res.status(502).json({
         ok: false,
@@ -101,8 +107,8 @@ ${JSON.stringify(context || {}, null, 2)}
       answer
     });
 
-  } catch (error) {
-    console.error("Server error:", error);
+  } catch {
+    console.error("TerraWatch AI server request failed.");
 
     return res.status(500).json({
       ok: false,

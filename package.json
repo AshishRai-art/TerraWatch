@@ -5,7 +5,9 @@
   "main": "main.js",
   "private": true,
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check main.js && node --check preload.js && node --check api/analyze.js && node --input-type=module --check < app.js && node --check src/config/app-config.mjs && node --check src/controllers/monitoring-controller.mjs && node --check src/models/monitoring-node.mjs && node --check src/models/prototype-data.mjs && node --check src/services/assistant-service.mjs && node --check src/services/sensor-service.mjs"
   },
   "devDependencies": {
     "electron": "^44.3.0"

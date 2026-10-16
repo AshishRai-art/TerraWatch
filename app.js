@@ -1,4 +1,10 @@
-/* TERRAWATCH — interactive research prototype. All readings are simulated. */
+/* TERRAWATCH renderer view — prototype readings are explicitly simulated. */
+import { appConfig } from "./src/config/app-config.mjs";
+import { createMonitoringController } from "./src/controllers/monitoring-controller.mjs";
+import { riskFromScore } from "./src/models/monitoring-node.mjs";
+import { createPrototypeNodes, navigationGroups as navGroups, statusMeta } from "./src/models/prototype-data.mjs";
+import { askAssistant } from "./src/services/assistant-service.mjs";
+
 const $ = (q, el = document) => el.querySelector(q);
 const $$ = (q, el = document) => [...el.querySelectorAll(q)];
 
@@ -7,38 +13,13 @@ const demoAccounts = {
   operator: { password: "operator123", name: "Arjun Kumar", role: "Safety Operator", initials: "AK" }
 };
 let authenticatedUser = null;
-
-const navGroups = [
-  ["OVERVIEW", [["Dashboard", "◫"], ["Map", "⌖"], ["Digital Twin", "◇"]]],
-  ["MONITORING", [["Nodes", "◉"], ["Sensors", "⌁"], ["Seismometer", "∿"], ["Analytics", "⌁"], ["APCI", "◌"], ["AI Assistant", "✦"]]],
-  ["OPERATIONS", [["Alerts", "!"], ["Incidents", "▣"], ["Remote Inspection", "◒"], ["History", "◷"]]],
-  ["SYSTEM", [["System Health", "♥"], ["Communication", "⌁"], ["Power", "ϟ"], ["Maintenance", "⚒"]]],
-  ["REFERENCE", [["Reports", "▤"], ["Settings", "⚙"]]]
-];
-
-const statusMeta = {
-  NORMAL: { class: "normal", color: "#21d69b", icon: "●" },
-  WATCH: { class: "watch", color: "#ffca63", icon: "●" },
-  WARNING: { class: "warning", color: "#ff8b47", icon: "▲" },
-  HIGH: { class: "high", color: "#ff5265", icon: "▲" },
-  OFFLINE: { class: "offline", color: "#64717a", icon: "●" }
-};
-
-const initialNodes = [
-  { id:"N01", location:"North Ridge", zone:"Zone A", status:"NORMAL", apci:12, tilt:0.18, crack:1.2, settlement:2.1, moisture:18, vibration:0.09, battery:92, rssi:-83, snr:8.2, health:"Healthy", sync:"8 sec ago", pos:[22,28], lat:28.5072, lng:77.0941, trend:"stable" },
-  { id:"N02", location:"East Drift", zone:"Zone B", status:"NORMAL", apci:16, tilt:0.21, crack:1.4, settlement:2.4, moisture:20, vibration:0.11, battery:87, rssi:-91, snr:6.4, health:"Healthy", sync:"6 sec ago", pos:[69,30], lat:28.5051, lng:77.1108, trend:"stable" },
-  { id:"N03", location:"West Chamber", zone:"Zone C", status:"WARNING", apci:58, tilt:0.86, crack:4.8, settlement:8.7, moisture:43, vibration:0.38, battery:76, rssi:-88, snr:5.7, health:"Healthy", sync:"4 sec ago", pos:[35,66], lat:28.4974, lng:77.0973, trend:"rising" },
-  { id:"N04", location:"Ventilation Shaft", zone:"Zone D", status:"WATCH", apci:34, tilt:0.42, crack:2.3, settlement:3.9, moisture:31, vibration:0.15, battery:65, rssi:-102, snr:2.8, health:"Healthy", sync:"11 sec ago", pos:[75,62], lat:28.4986, lng:77.1137, trend:"rising" },
-  { id:"N05", location:"South Stope", zone:"Zone E", status:"NORMAL", apci:14, tilt:0.17, crack:1.1, settlement:1.9, moisture:19, vibration:0.08, battery:48, rssi:-98, snr:4.1, health:"Fault: crack meter", sync:"5 sec ago", pos:[56,82], lat:28.4902, lng:77.1056, trend:"flatline" },
-  { id:"N06", location:"Lower Gallery", zone:"Zone F", status:"OFFLINE", apci:0, tilt:null, crack:null, settlement:null, moisture:null, vibration:null, battery:61, rssi:null, snr:null, health:"Communication gap", sync:"24 min ago", pos:[16,83], lat:28.4896, lng:77.0919, trend:"offline" },
-  { id:"N07", location:"Main Entry", zone:"Zone G", status:"NORMAL", apci:9, tilt:0.12, crack:0.9, settlement:1.5, moisture:16, vibration:0.07, battery:96, rssi:-78, snr:10.8, health:"Healthy", sync:"9 sec ago", pos:[88,49], lat:28.5013, lng:77.1192, trend:"stable" }
-];
+const initialNodes = createPrototypeNodes();
 
 const state = {
-  page: "Dashboard", nodes: structuredClone(initialNodes), selectedNode: "N03", selectedZone: "Zone C",
+  page: "Dashboard", nodes: createPrototypeNodes(), selectedNode: "N03", selectedZone: "Zone C",
   scenario: "Multi-sensor convergence", demoStage: 0, running: false, robot: "STANDBY", robotLength: 0,
   incident: { id:"INC-2409", state:"INVESTIGATING", acknowledged:true, created:"14:32:18", target:"West Chamber / Zone C" },
-  syncSeconds: 10, lastSyncAt: Date.now(), dark: true, simulation: true, thresholds: [19,44,69], alerts: [], chat: [], charts: {}, filters: { node:"N03", range:"Last 6 hours" },
+  syncSeconds: 10, lastSyncAt: Date.now(), dark: false, simulation: true, thresholds: [19,44,69], alerts: [], chat: [], charts: {}, filters: { node:"N03", range:"Last 6 hours" },
   seismic: { mode:"SIMULATION", node:"N03", channel:"resultant", waveform:[], eventHistory:[], activeEvent:null, demoRunning:false, demoElapsed:0, sampleRate:100, threshold:0.06, minDuration:1.2, dominantFrequency:null, quality:"GOOD" }
 };
 
@@ -50,27 +31,23 @@ const baseAlerts = () => [
 ];
 state.alerts = baseAlerts();
 
-const API_BASE = window.TERRAWATCH_API_URL || "http://127.0.0.1:8000";
-const apiState = { connected: false };
-
-function normalizeBackendNode(raw, index) {
-  const current = state.nodes.find(node => node.id === (raw.id || raw.node_id)) || initialNodes[index % initialNodes.length];
-  return { ...current, ...raw, id: raw.id || raw.node_id || current.id, location: raw.location || raw.name || current.location, zone: raw.zone || current.zone, status: String(raw.status || raw.risk_level || current.status).toUpperCase(), lat: Number(raw.lat ?? raw.latitude ?? current.lat), lng: Number(raw.lng ?? raw.lon ?? raw.longitude ?? current.lng), pos: current.pos };
-}
-
-async function loadBackendSensors() {
-  try {
-    const response = await fetch(`${API_BASE}/sensors`, { headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = await response.json();
-    const sensors = Array.isArray(payload) ? payload : payload.sensors || payload.nodes || payload.data || [];
-    if (!sensors.length) throw new Error("No sensor records returned");
-    state.nodes = sensors.map(normalizeBackendNode);
-    apiState.connected = true;
+const apiState = { connected: false, message: "Using labelled local prototype data." };
+const monitoringController = createMonitoringController({
+  baseUrl: appConfig.apiBaseUrl,
+  fallbackNodes: initialNodes,
+  timeoutMs: appConfig.sensorRequestTimeoutMs,
+  onResult(result) {
+    state.nodes = result.nodes;
+    apiState.connected = result.ok;
+    apiState.message = result.ok ? "FastAPI sensor data loaded." : `Backend unavailable: ${result.error}`;
+    const dataSourcePill = $("#dataSourcePill");
+    if (dataSourcePill) dataSourcePill.innerHTML = `<i></i> ${result.ok ? "FASTAPI SENSOR DATA" : "SIMULATED PROTOTYPE DATA"}`;
     render();
-  } catch (error) {
-    console.info("TERRAWATCH backend unavailable; using local prototype sensor data.", error.message);
   }
+});
+
+function loadBackendSensors() {
+  return monitoringController.refresh();
 }
 
 function navTemplate() {
@@ -144,7 +121,7 @@ function setPage(page) {
 function statusBadge(status) { return `<span class="status-badge ${statusMeta[status]?.class || ""}">${statusMeta[status]?.icon || "●"} ${status}</span>`; }
 function n(id) { return state.nodes.find(x => x.id === id); }
 function val(v, suffix="") { return v === null || v === undefined ? "—" : `${typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(v < 2 ? 2 : 1)) : v}${suffix}`; }
-function riskFrom(score) { return score <= state.thresholds[0] ? "NORMAL" : score <= state.thresholds[1] ? "WATCH" : score <= state.thresholds[2] ? "WARNING" : "HIGH"; }
+function riskFrom(score) { return riskFromScore(score, state.thresholds); }
 function kpi(label, value, sub, kind="", id="") { return `<article class="kpi"${id?` id="${id}"`:""}><div class="label">${label}</div><div class="value ${kind}">${value}</div><div class="delta ${kind}">${sub}</div></article>`; }
 function formatClock(seconds) { return `00:${String(Math.max(0, seconds)).padStart(2, "0")}`; }
 function pageHead(title, description, actions="") { return `<div class="page-head"><div><h2>${title}</h2><p>${description}</p></div><div class="page-actions">${actions}</div></div>`; }
@@ -185,7 +162,7 @@ function nodeCard(node) { return `<article class="panel node-card ${node.status.
 function renderDashboard() {
   const online = state.nodes.filter(x=>x.status!=="OFFLINE").length, warning=state.nodes.filter(x=>x.status==="WARNING").length, high=state.nodes.filter(x=>x.status==="HIGH").length, watch=state.nodes.filter(x=>x.status==="WATCH").length, faults=state.nodes.filter(x=>x.health.includes("Fault")).length;
   const kpis = `<div class="kpi-grid">${kpi("Total nodes",state.nodes.length,"1 gateway · 7 zones")}${kpi("Online",online,`${state.nodes.length-online} offline`,"good")}${kpi("Watch",watch,"Requires review","warn")}${kpi("Warning",warning,"N03 · Zone C","high")}${kpi("High risk",high,high?"Immediate verification":"No active high events",high?"high":"good")}${kpi("Sensor faults",faults,"Separate from ground risk","warn")}${kpi("Last sync",formatClock(10-state.syncSeconds),`next refresh in ${formatClock(state.syncSeconds)}`,"good","syncKpi")}</div>`;
-  const map = panel("Live mine map", "7 nodes · risk and communications overlay", mineMap(), `<button class="small-btn active">Risk</button><button class="small-btn">Coverage</button><button class="small-btn" data-nav="Map">Expand</button>`, "map-panel");
+  const map = panel("Mine monitoring map", `${state.nodes.length} nodes · ${apiState.connected ? "FastAPI sensor feed" : "simulated prototype data"} · risk and communications overlay`, mineMap(), `<button class="small-btn active">Risk</button><button class="small-btn">Coverage</button><button class="small-btn" data-nav="Map">Expand</button>`, "map-panel");
   const alerts = panel("Priority queue", "geological, sensor and communication signals are separated", `<div class="alert-list">${state.alerts.slice(0,4).map(a=>`<div class="alert ${a.type}"><span class="alert-icon">${a.type==="warning"?"▲":a.type==="fault"?"⚠":"●"}</span><div><b>${a.title}</b><small>${a.detail}</small></div><time>${a.time}</time></div>`).join("")}</div>`, `<button class="small-btn" data-nav="Alerts">All alerts</button>`);
   const ai = panel("TERRAWATCH AI assistant", "AI-assisted prototype analysis — demonstration data", `<div class="ai-summary"><span class="ai-tag">N03 · OBSERVATION WINDOW</span><p>Crack displacement, tilt and settlement are moving above the local baseline in a related period.</p><div class="ai-evidence"><span class="evidence">CRACK +3.6 mm</span><span class="evidence">TILT ↗</span><span class="evidence">APCI 58</span></div></div><form class="chat-mini" id="miniChat"><input placeholder="Ask about Zone C or N03…" aria-label="Ask the AI assistant"/><button class="small-btn">ASK</button></form>`);
   const trend = panel("N03 multi-sensor trend", "Current window · relative change from local baseline", `<div class="chart-legend"><span><i class="line-key" style="background:#ff8b47"></i>Crack deviation</span><span><i class="line-key" style="background:#35bce8"></i>Tilt deviation</span><span><i class="line-key"></i>Settlement rate</span></div><div class="chart-wrap">${multiLine()}</div>`, `<button class="small-btn" data-nav="Analytics">Analysis</button>`);
@@ -243,46 +220,18 @@ function assistantContext() {
   };
 }
 async function askLiveAssistant(query) {
-  try {
-    const response = await fetch("/api/analyze", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        query,
-        context: assistantContext()
-      })
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: result.error || "AI service request failed."
-      };
-    }
-
-    return {
-      ok: true,
-      answer: result.answer
-    };
-
-  } catch (error) {
-    console.error("TerraWatch AI error:", error);
-
-    return {
-      ok: false,
-      error: "Secure AI service is currently unavailable."
-    };
-  }
+  return askAssistant({
+    bridge: window.terrawatchAI,
+    question: query,
+    context: assistantContext(),
+    maxLength: appConfig.maxAssistantQuestionLength
+  });
 }
 function renderAI() {
   const messages= state.chat.length?state.chat:[{role:"ai",text:chatAnswer("what is happening in zone c")}];
   const matrixLabels=["Tilt","Crack","Settle.","Moist.","Vib."]; const combinations=[["—","✓","✓","—","✓"],["✓","—","✓","✓","—"],["✓","✓","—","✓","✓"],["—","✓","✓","—","—"],["✓","—","✓","—","—"]];
   const matrix=`<div class="matrix"><div class="matrix-grid"><div class="blank"></div>${matrixLabels.map(x=>`<div class="head">${x}</div>`).join("")}${matrixLabels.map((name,i)=>`<div class="head">${name}</div>${combinations[i].map(x=>`<div class="${x==='✓'?'yes':'no'}">${x}</div>`).join("")}`).join("")}</div></div>`;
-  return `${pageHead("TERRAWATCH AI Assistant", "Explainable analysis based on simulated system data. This assistant supports, but never replaces, trained human decision-making.", `<button class="secondary" data-action="clear-chat">Clear conversation</button><button class="primary" data-action="ask-suggested">Ask system summary</button>`)}<div class="ai-layout">${panel("Analysis conversation", "Available data: nodes, trends, APCI, health, communication and incident status", `<div class="chat-log" id="chatLog">${messages.map(m=>`<div class="message ${m.role}">${m.role==="ai"?m.text:m.text}</div>`).join("")}</div><form class="chat-input" id="chatForm"><input id="chatQuestion" placeholder="Ask: Why did N03 increase? Are there sensor faults?"/><button class="primary">Send</button></form>`, "", "chat-panel")}<div class="right-stack">${panel("Sensor convergence matrix", "Relationships among abnormal measurements in the current observation window", matrix)}${panel("Transparency record", "Supporting information presented with each AI insight", `<div class="health-grid"><div class="health-item"><span class="mini-label">DATA SOURCE</span><b>Simulated</b><small>● Demo mode</small></div><div class="health-item"><span class="mini-label">BASELINE</span><b>Site-specific</b><small>● Required</small></div><div class="health-item"><span class="mini-label">APCI CONTEXT</span><b>58 · Warning</b><small>● Explainable</small></div><div class="health-item"><span class="mini-label">DECISION OWNER</span><b>Human operator</b><small>● Required</small></div></div>`)}${panel("Suggested questions", "", `<div class="alert-list"><button class="alert" data-question="What is happening in Zone C?"><span class="alert-icon">→</span><div><b>What is happening in Zone C?</b><small>Review evidence and action</small></div></button><button class="alert" data-question="Are there any sensor faults?"><span class="alert-icon">→</span><div><b>Are there any sensor faults?</b><small>Separate equipment from risk</small></div></button><button class="alert" data-question="Compare N01 and N03."><span class="alert-icon">→</span><div><b>Compare N01 and N03.</b><small>Find the outlier node</small></div></button></div>`)} </div></div>`;
+  return `${pageHead("TERRAWATCH AI Assistant", "Explainable analysis based on simulated system data. This assistant supports, but never replaces, trained human decision-making.", `<button class="secondary" data-action="clear-chat">Clear conversation</button><button class="primary" data-action="ask-suggested">Ask system summary</button>`)}<div class="ai-layout">${panel("Analysis conversation", "Available data: nodes, trends, APCI, health, communication and incident status", `<div class="chat-log" id="chatLog">${messages.map(m=>`<div class="message ${m.role}">${m.role==="ai"?m.text:escapeHTML(m.text)}</div>`).join("")}</div><form class="chat-input" id="chatForm"><input id="chatQuestion" maxlength="1200" placeholder="Ask: Why did N03 increase? Are there sensor faults?" aria-label="Ask the TerraWatch AI assistant"/><button class="primary">Send</button></form>`, "", "chat-panel")}<div class="right-stack">${panel("Sensor convergence matrix", "Relationships among abnormal measurements in the current observation window", matrix)}${panel("Transparency record", "Supporting information presented with each AI insight", `<div class="health-grid"><div class="health-item"><span class="mini-label">DATA SOURCE</span><b>Simulated</b><small>● Demo mode</small></div><div class="health-item"><span class="mini-label">BASELINE</span><b>Site-specific</b><small>● Required</small></div><div class="health-item"><span class="mini-label">APCI CONTEXT</span><b>58 · Warning</b><small>● Explainable</small></div><div class="health-item"><span class="mini-label">DECISION OWNER</span><b>Human operator</b><small>● Required</small></div></div>`)}${panel("Suggested questions", "", `<div class="alert-list"><button class="alert" data-question="What is happening in Zone C?"><span class="alert-icon">→</span><div><b>What is happening in Zone C?</b><small>Review evidence and action</small></div></button><button class="alert" data-question="Are there any sensor faults?"><span class="alert-icon">→</span><div><b>Are there any sensor faults?</b><small>Separate equipment from risk</small></div></button><button class="alert" data-question="Compare N01 and N03."><span class="alert-icon">→</span><div><b>Compare N01 and N03.</b><small>Find the outlier node</small></div></button></div>`)} </div></div>`;
 }
 function renderAlerts() {
   const rows = state.alerts.map((a,i)=>`<tr><td><span class="severity-${a.type==='fault'||a.type==='watch'?'watch':a.type==='warning'?'warning':'normal'}">${a.type==='warning'?"▲":a.type==='fault'?"⚠":"●"}</span> ${a.title}</td><td>${a.detail.split(" • ")[0]}</td><td>${a.type==='fault'?"Sensor health":a.type==='offline'?"Communication":a.type==='watch'?"Environmental":"Ground anomaly"}</td><td>${a.time}</td><td>${i===0?statusBadge("WARNING"):a.type==='offline'?statusBadge("OFFLINE"):statusBadge("WATCH")}</td><td><button class="row-action" data-action="ack-alert" data-alert="${i}">${i===0?"ACKNOWLEDGE":"REVIEW"} →</button></td></tr>`).join("");

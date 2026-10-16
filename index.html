@@ -13,8 +13,9 @@
     <link rel="stylesheet" href="auth.css" />
     <link rel="stylesheet" href="demo-auth.css" />
     <link rel="stylesheet" href="seismometer.css" />
+    <link rel="stylesheet" href="redesign.css" />
   </head>
-  <body>
+  <body class="light">
     <section class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
       <div class="login-grid" aria-hidden="true"></div>
       <div class="login-orbit login-orbit-one" aria-hidden="true"></div>
@@ -43,7 +44,7 @@
     <div class="app-shell is-hidden" id="appShell">
       <aside class="sidebar">
         <div class="brand"><span class="brand-mark">◈</span><span>TERRA<span>WATCH</span></span></div>
-        <div class="prototype-pill"><i></i> LIVE DEMO DATA</div>
+        <div class="prototype-pill" id="dataSourcePill"><i></i> SIMULATED PROTOTYPE DATA</div>
         <nav id="nav"></nav>
         <div class="side-footer">
           <div class="operator"><span class="avatar" id="operatorAvatar">AK</span><span><b id="operatorName">Arjun Kumar</b><small id="operatorRole">Safety Operator</small></span><button id="logoutBtn" aria-label="Sign out" title="Sign out">↪</button></div>
@@ -54,7 +55,7 @@
         <header class="topbar">
           <div class="crumb"><button class="mobile-menu" id="menuBtn" aria-label="Toggle navigation menu">☰</button><span id="pageEyebrow">COMMAND CENTER</span><h1 id="pageTitle">Mine overview</h1></div>
           <div class="top-actions">
-            <button class="icon-btn" id="themeBtn" title="Switch to light mode" aria-label="Switch to light mode">◐</button>
+            <button class="icon-btn" id="themeBtn" title="Switch to night mode" aria-label="Switch to night mode">◐</button>
             <button class="primary" id="scenarioBtn" aria-label="Run demo sequence">▶ Run demo sequence</button>
           </div>
         </header>
@@ -65,6 +66,6 @@
     <div class="toast-wrap" id="toasts"></div>
     <div class="modal-backdrop" id="modal"></div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

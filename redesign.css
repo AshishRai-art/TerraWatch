@@ -1,0 +1,19 @@
+/* Light-first, restrained operations console refinements. Loaded after legacy styles. */
+:root { color-scheme: light; }
+body.light { --bg:#f5f8f7; --surface:#ffffff; --surface2:#f7faf9; --surface3:#eef4f2; --line:#d9e4e1; --text:#172b27; --muted:#5d706b; --accent:#087e68; --cyan:#137a9b; --watch:#a56400; --warning:#b55216; --high:#b42338; --shadow:0 8px 26px rgba(21, 61, 50, .08); }
+.light .topbar { min-height:80px; background:rgba(255,255,255,.94); backdrop-filter:blur(10px); }
+.light .sidebar { background:#fbfdfc; }
+.light .brand { color:#123a32; }
+.light .nav-item { min-height:34px; border-radius:5px; }
+.light .nav-item.active { box-shadow:inset 3px 0 0 #087e68; }
+.light .kpi, .light .panel { border-radius:8px; }
+.light .kpi:hover, .light .panel:hover { border-color:#b9d4cc; }
+.light button:focus-visible, .light a:focus-visible, .light input:focus-visible, .light select:focus-visible { outline:3px solid rgba(8,126,104,.24); outline-offset:2px; }
+.light .primary { background:#087e68; box-shadow:0 1px 1px rgba(0,0,0,.08); }
+.light .primary:hover { background:#066956; }
+.light .page-head h2 { color:#102e27; }
+.light .data-table th { letter-spacing:.06em; }
+.light .status-badge { font-weight:600; }
+.light .safety-banner { min-height:38px; }
+.light .leaflet-container { font-family:Manrope,Arial,sans-serif; }
+@media (prefers-reduced-motion: reduce) { .light *, .light *::before, .light *::after { scroll-behavior:auto !important; transition-duration:.01ms !important; animation-duration:.01ms !important; } }
